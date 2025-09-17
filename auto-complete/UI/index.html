@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quill Autocomplete (Ghost)</title>
+
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet" />
+  <style>
+    /* Anchor overlay to container so Quill won't touch it */
+    .ql-container { position: relative; }
+    .ql-editor { min-height: 200px; }
+
+    .ghost-suggestion {
+      position: absolute;
+      pointer-events: none;
+      opacity: 0.55;
+      white-space: pre-wrap;
+      z-index: 5;           /* above editor text */
+      user-select: none;
+      display: none;        /* hidden until we have text */
+    }
+  </style>
+</head>
+<body>
+  <div id="editor"></div>
+
+  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
