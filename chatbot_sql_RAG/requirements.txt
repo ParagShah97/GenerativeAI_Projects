@@ -1,0 +1,8 @@
+langchain
+langchain_openai
+python-dotenv
+pandas
+pydantic
+SQLAlchemy>=2.0.0
+PyMySQL
+langchain_community

@@ -1,0 +1,16 @@
+[project]
+name = "chatbot-sql-rag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain>=0.3.27",
+    "langchain-community>=0.3.30",
+    "langchain-openai>=0.3.33",
+    "pandas>=2.3.2",
+    "pydantic>=2.11.9",
+    "pymysql>=1.1.2",
+    "python-dotenv>=1.1.1",
+    "sqlalchemy>=2.0.0",
+]
