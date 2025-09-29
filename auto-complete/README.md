@@ -100,8 +100,3 @@ This project is a minimal demo. PRs are welcome to:
 - Improve UI/UX of ghost overlay
 - Add support for streaming completions
 - Integrate with other editors (CKEditor, TipTap, Monaco)
-
----
-
-## 📜 License
-MIT
