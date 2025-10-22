@@ -23,6 +23,6 @@ class Patients(Base):
     __tablename__ = "PatientsData"
     Patient_ID = Column(Integer, primary_key=True)
     Age = Column(Integer)
-    Gender = Column(String(50), primary_key=True)
-    Diagnosis = Column(String(200), primary_key=True)
-    Admitted = Column(String(200), primary_key=True)
+    Gender = Column(String(50))
+    Diagnosis = Column(String(200))
+    Admitted = Column(String(200))

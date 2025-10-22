@@ -1,0 +1,12 @@
+GitPython
+langchain
+langchain_openai
+python-dotenv
+pinecone-client
+pydantic
+SQLAlchemy>=2.0.0
+fastapi
+uvicorn[standard]
+supabase
+psycopg[binary]
+streamlit

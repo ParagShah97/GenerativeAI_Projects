@@ -1,0 +1,19 @@
+[project]
+name = "github-readme-be"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.119.0",
+    "gitpython>=3.1.45",
+    "langchain>=0.3.27",
+    "langchain-openai>=0.3.35",
+    "pinecone-client>=6.0.0",
+    "psycopg[binary]>=3.2.10",
+    "pydantic>=2.12.2",
+    "python-dotenv>=1.1.1",
+    "sqlalchemy>=2.0.0",
+    "supabase>=2.22.0",
+    "uvicorn[standard]>=0.37.0",
+]

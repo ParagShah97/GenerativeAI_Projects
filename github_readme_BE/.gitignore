@@ -1,0 +1,51 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.githubReadmeBE
+.env/
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Streamlit config/history
+.streamlit/config.toml
+.streamlit/secrets.toml
+.streamlit/.cache/
+
+# Ollama model cache (if you mount it here)
+ollama/
+
+# Chroma DB storage
+chroma_pdf_db/
+pdf_store_dir/
+
+# Temporary PDF uploads
+*.pdf
+*.tmp
+*.log
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# VS Code / PyCharm / JetBrains
+.vscode/
+.idea/
+
+# dotenv
+
+
+# Logs
+*.log
+logs/
+
+# temp files
+temp/
+*.swp
