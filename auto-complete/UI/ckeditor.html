@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CKEditor Ghost Autocomplete</title>
+
+  <!-- CDN Classic build -->
+  <script src="https://cdn.ckeditor.com/ckeditor5/41.4.2/classic/ckeditor.js"></script>
+
+  <style>
+    /* Make the editable region a positioning context for the ghost overlay */
+    .ck-editor__editable { position: relative; min-height: 220px; }
+
+    .ghost-suggestion {
+      position: absolute;
+      pointer-events: none;
+      opacity: 0.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: none;
+      display: none;
+      z-index: 5;
+    }
+
+    /* optional: match editor font */
+    .ghost-suggestion.match-editor {
+      font-family: inherit;
+      font-size: inherit;
+      line-height: inherit;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor">Start typing here…</div>
+
+  <script type="module">
+    // ===== CONFIG =====
+    const API_URL     = "http://127.0.0.1:8000/complete_once"; // FastAPI one-shot
+    const DEBOUNCE_MS = 500;
+    const MIN_CHARS   = 20; // since last sentence end
+
+    // ===== HELPERS =====
+    const debounce = (fn, ms) => {
+      let t = null;
+      const deb = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+      deb.cancel = () => { clearTimeout(t); t = null; };
+      return deb;
+    };
+
+    const stripHTML = (html) => {
+      const d = document.createElement("div");
+      d.innerHTML = html;
+      return d.textContent || d.innerText || "";
+    };
+
+    // Find fragment since last '.', '!' or '?' or newline.
+    const lastSentenceFragment = (text) => {
+      const last = Math.max(
+        text.lastIndexOf("."),
+        text.lastIndexOf("!"),
+        text.lastIndexOf("?"),
+        text.lastIndexOf("\n")
+      );
+      return (last >= 0 ? text.slice(last + 1) : text).trimStart();
+    };
+
+    // ===== MAIN =====
+    ClassicEditor
+      .create(document.querySelector('#editor'), {
+        // minimal toolbar; customize as needed
+        toolbar: ['undo','redo','|','heading','|','bold','italic','link','bulletedList','numberedList','blockQuote','codeBlock']
+      })
+      .then(editor => {
+        let ghost = null;
+        let currentSuggestion = "";
+        let lastSentPrefix = "";
+        let inflightController = null;
+        let latestRequestId = 0;
+        let inComposition = false;
+        let blockUntilNextType = false;
+        let caretAtRequestKey = ""; // selection signature at request time
+
+        // Create overlay
+        function ensureGhost() {
+          if (ghost && ghost.isConnected) return;
+          const rootEl = editor.ui.view.editable.element; // contentEditable element
+          ghost = document.createElement("div");
+          ghost.className = "ghost-suggestion match-editor";
+          rootEl.appendChild(ghost);
+        }
+
+        function clearSuggestion() {
+          currentSuggestion = "";
+          if (ghost) { ghost.textContent = ""; ghost.style.display = "none"; }
+        }
+
+        // Read entire editor plain text (cheap & reliable)
+        function getAllPlainText() {
+          return stripHTML(editor.getData() || "");
+        }
+
+        // Try to compute a DOM rect for the current caret, then position ghost near it.
+        function positionGhostAtCaret() {
+          if (!ghost || !currentSuggestion) return;
+
+          const model = editor.model;
+          const view  = editor.editing.view;
+          const mapper = editor.editing.mapper;
+
+          const sel = model.document.selection;
+          const modelPos = sel.getFirstPosition();
+          if (!modelPos) return;
+
+          // Map model pos -> view pos -> DOM range -> client rect
+          const viewPos = mapper.toViewPosition(modelPos);
+          const viewRange = view.createRange(viewPos, viewPos);
+          const domRange = editor.editing.view.domConverter.viewRangeToDom(viewRange);
+
+          let rect = null;
+          if (domRange) {
+            const rects = domRange.getClientRects();
+            if (rects && rects.length) rect = rects[0];
+          }
+
+          const editable = editor.ui.view.editable.element;
+          const editableRect = editable.getBoundingClientRect();
+
+          // Fallback: if rect is null (empty lines etc.), anchor at selection end of editable.
+          const top  = rect ? rect.top  - editableRect.top  + editable.scrollTop  : editable.scrollTop + editable.clientHeight - 24;
+          const left = rect ? rect.left - editableRect.left + editable.scrollLeft : 8;
+
+          ghost.style.top  = `${top}px`;
+          ghost.style.left = `${left}px`;
+          ghost.style.display = "block";
+        }
+
+        function acceptSuggestion() {
+          if (!currentSuggestion) return;
+
+          // Avoid double spaces/punct
+          const model = editor.model;
+          editor.editing.view.focus();
+
+          model.change(writer => {
+            const pos = model.document.selection.getFirstPosition();
+            if (!pos) return;
+
+            // Remove leading spaces if previous char is whitespace
+            const prevPos = model.createPositionAt(pos.parent, Math.max(0, pos.offset - 1));
+            let prevChar = "";
+            try {
+              const range = model.createRange(prevPos, pos);
+              const it = range.getWalker({ singleCharacters: true });
+              const step = it.next();
+              if (!step.done && step.value && step.value.item && step.value.type === 'text') {
+                prevChar = step.value.item.data || "";
+              }
+            } catch {}
+
+            let toInsert = currentSuggestion;
+            if (/^\s/.test(toInsert) && /\s/.test(prevChar)) {
+              toInsert = toInsert.replace(/^\s+/, "");
+            }
+            // Avoid duplicate punctuation like ".."
+            if (/[.!?]\s*$/.test(prevChar) && /^[.!?]/.test(toInsert)) {
+              toInsert = toInsert.replace(/^[.!?]+/, "");
+            }
+
+            if (!toInsert) { clearSuggestion(); return; }
+
+            writer.insertText(toInsert, pos);
+            const newPos = writer.createPositionAt(pos.parent, pos.offset + toInsert.length);
+            writer.setSelection(newPos);
+          });
+
+          // Cancel pending work; require next keystroke
+          if (inflightController) inflightController.abort();
+          debouncedFetch.cancel();
+          blockUntilNextType = true;
+          lastSentPrefix = "";
+          clearSuggestion();
+        }
+
+        // Compose a simple, unique key for caret position to detect drift
+        function selectionSignature() {
+          const sel = editor.model.document.selection;
+          const pos = sel.getFirstPosition();
+          if (!pos) return "";
+          return pos.path.join("/") + ":" + pos.root.rootName + ":" + pos.offset;
+        }
+
+        async function fetchSuggestion() {
+          if (blockUntilNextType || inComposition) return;
+
+          // Build raw prefix = last sentence fragment of whole plain text
+          const allText = getAllPlainText();
+          const rawPrefix = lastSentenceFragment(allText);
+
+          if (!rawPrefix || rawPrefix.trim().length < MIN_CHARS) {
+            clearSuggestion();
+            return;
+          }
+          if (rawPrefix === lastSentPrefix) return;
+          lastSentPrefix = rawPrefix;
+
+          // cancel previous
+          if (inflightController) inflightController.abort();
+          inflightController = new AbortController();
+          const signal = inflightController.signal;
+
+          const myId = ++latestRequestId;
+          const sigAtReq = selectionSignature(); // caret signature
+
+          try {
+            const res = await fetch(API_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query: rawPrefix }),
+              signal
+            });
+
+            if (!res.ok) { clearSuggestion(); return; }
+
+            let text = (await res.text() || "").trim();
+            text = text.replace(/\r?\n+/g, " ");      // flatten
+            if (!/\S/.test(text)) { clearSuggestion(); return; }
+
+            // stale guard + caret drift guard
+            const sigNow = selectionSignature();
+            if (myId !== latestRequestId || sigNow !== sigAtReq) return;
+
+            currentSuggestion = text;
+            ensureGhost();
+            ghost.textContent = currentSuggestion;
+            requestAnimationFrame(positionGhostAtCaret);
+          } catch (e) {
+            if (e.name !== "AbortError") console.error(e);
+            clearSuggestion();
+          }
+        }
+
+        const debouncedFetch = debounce(fetchSuggestion, DEBOUNCE_MS);
+
+        // ===== EVENT WIRING =====
+        // Input changes → debounce fetch
+        editor.model.document.on('change:data', (_evt) => {
+          if (blockUntilNextType) {
+            blockUntilNextType = false;
+            // still reposition the ghost (there may be none yet)
+            requestAnimationFrame(positionGhostAtCaret);
+            return;
+          }
+          requestAnimationFrame(() => { positionGhostAtCaret(); debouncedFetch(); });
+        });
+
+        // Caret move → reposition
+        editor.model.document.selection.on('change:range', () => {
+          requestAnimationFrame(positionGhostAtCaret);
+        });
+
+        // IME/composition guards
+        const editableEl = editor.ui.view.editable.element;
+        editableEl.addEventListener("compositionstart", () => { inComposition = true; });
+        editableEl.addEventListener("compositionend",   () => { inComposition = false; debouncedFetch(); });
+
+        // Accept / clear via keys: Tab, ArrowRight, Esc
+        // Use DOM keydown to avoid stepping on CKEditor keystroke pipeline unless necessary
+        editableEl.addEventListener("keydown", (e) => {
+          if (e.key === "Tab" && currentSuggestion) {
+            e.preventDefault();
+            acceptSuggestion();
+          } else if (e.key === "ArrowRight" && currentSuggestion) {
+            e.preventDefault();
+            acceptSuggestion();
+          } else if (e.key === "Escape") {
+            clearSuggestion();
+          }
+        }, true);
+
+        // Hide when clicking outside
+        document.addEventListener("click", (e) => {
+          if (!editableEl.contains(e.target)) clearSuggestion();
+        });
+
+        // Reposition on scroll/resize
+        editableEl.addEventListener("scroll", () => requestAnimationFrame(positionGhostAtCaret));
+        window.addEventListener("resize", () => requestAnimationFrame(positionGhostAtCaret));
+
+        // Initial
+        ensureGhost();
+        requestAnimationFrame(positionGhostAtCaret);
+        editableEl.focus();
+      })
+      .catch(err => console.error(err));
+  </script>
+</body>
+</html>

@@ -26,7 +26,7 @@ app.add_middleware(
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
-    raise ValueError("⚠️ OPENAI_API_KEY not found. Did you create a .env file?")
+    raise ValueError(" OPENAI_API_KEY not found. Did you create a .env file?")
 
 llm = ChatOpenAI(
     model="gpt-4o-mini",
@@ -38,7 +38,7 @@ llm = ChatOpenAI(
 prompt = ChatPromptTemplate.from_template(
     """You are an autocomplete engine.
 User is typing: "{prefix}"
-Most important Continue the text naturally (no preface, no quotes, no extra commentary), can also complete the half-word.
+Most important Continue the text naturally (no preface, don't add single or double quotes, no extra commentary), can also complete the half-word.
 Keep it concise (<= 5 tokens)."""
 )
 
