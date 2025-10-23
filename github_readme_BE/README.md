@@ -3,6 +3,9 @@
 ## Overview
 This FastAPI application streamlines the management of Git repositories by facilitating cloning, code aggregation, and automated README file generation. It enhances project documentation and management, making it easier for developers to maintain and understand their codebases.
 
+## Demo
+URL: Youtube - https://youtu.be/qpqVDrqpb20
+
 ## Tech Stack
 - **Backend**: FastAPI
 - **Database**: Supabase
@@ -151,4 +154,5 @@ Consider using Docker for containerization. Configure CI/CD pipelines for automa
 - **Limitations**: Currently supports only specific programming languages for summarization; further extensions may be needed for broader compatibility. 
 
 This README provides a concise overview of the project, its components, and how to get started. For further details, please refer to the code and comments within the modules.
+
 
